@@ -14,7 +14,7 @@ function toPublicDocument(document) {
 
 function createDocumentService({ documentRepository, fileRepository }) {
   return {
-    uploadDocument({ file, owner }) {
+    async uploadDocument({ file, owner }) {
       if (!file) {
         throw createServiceError(400, 'FILE_REQUIRED', 'Envie um arquivo no campo "file".');
       }
@@ -34,7 +34,14 @@ function createDocumentService({ documentRepository, fileRepository }) {
         owner,
       };
 
-      documentRepository.save(document);
+      try {
+        documentRepository.save(document);
+      } catch (error) {
+        try {
+          await fileRepository.removeFile(document.storedName);
+        } catch {}
+        throw error;
+      }
       return toPublicDocument(document);
     },
 

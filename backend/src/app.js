@@ -20,13 +20,25 @@ function createApp(options = {}) {
     maximumUploadBytes,
   });
   const documentService = createDocumentService({ documentRepository, fileRepository });
-  const documentController = createDocumentController(documentService);
+  const requireOwnerAuthentication = options.requireOwnerAuthentication
+    ?? process.env.NODE_ENV === 'production';
+  const ownerAuthenticationConfigured = typeof options.authenticateRequest === 'function'
+    && typeof options.resolveOwner === 'function';
+  const documentController = createDocumentController(documentService, {
+    resolveOwner: options.resolveOwner,
+    requireOwnerAuthentication,
+    ownerAuthenticationConfigured,
+  });
   const upload = fileRepository.createUploadMiddleware();
 
   const app = express();
   app.use(express.json());
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
-  app.use(createDocumentRoutes(documentController, upload));
+  app.use(createDocumentRoutes(
+    documentController,
+    upload,
+    options.authenticateRequest,
+  ));
   app.use((req, res) => {
     res.status(404).json({
       error: { code: 'ROUTE_NOT_FOUND', message: 'Rota não encontrada.' },

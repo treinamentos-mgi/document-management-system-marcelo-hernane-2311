@@ -1,6 +1,23 @@
-function createDocumentController(documentService) {
+function createDocumentController(documentService, options = {}) {
+  const resolveOwner = options.resolveOwner || ((req) => req.get('X-User-Id'));
+
   function requireOwner(req, res, next) {
-    const owner = req.get('X-User-Id')?.trim();
+    if (options.requireOwnerAuthentication && !options.ownerAuthenticationConfigured) {
+      return res.status(503).json({
+        error: {
+          code: 'AUTH_NOT_CONFIGURED',
+          message: 'A autenticação de usuários não está configurada.',
+        },
+      });
+    }
+
+    let owner;
+    try {
+      owner = resolveOwner(req)?.trim();
+    } catch (error) {
+      return next(error);
+    }
+
     if (!owner || owner.length > 128) {
       return res.status(400).json({
         error: { code: 'INVALID_USER', message: 'Informe um identificador de usuário válido.' },
@@ -11,9 +28,9 @@ function createDocumentController(documentService) {
     return next();
   }
 
-  function upload(req, res, next) {
+  async function upload(req, res, next) {
     try {
-      const document = documentService.uploadDocument({ file: req.file, owner: req.owner });
+      const document = await documentService.uploadDocument({ file: req.file, owner: req.owner });
       return res.status(201).json({ document });
     } catch (error) {
       return next(error);

@@ -120,8 +120,10 @@ Os caminhos abaixo são os caminhos do backend. No frontend de desenvolvimento, 
 - O fluxo segue `routes -> controllers -> services -> repositories`. `app.js` compõe as implementações e injeta o middleware Multer na rota.
 - `documentRepository` mantém metadados em memória; `localFileRepository` configura Multer `diskStorage` e fornece streams de leitura do diretório local.
 - O `owner` é derivado do cabeçalho, nunca do corpo de upload. Essa identificação é apenas conveniência para o MVP: como não há autenticação, um cliente pode declarar outro `X-User-Id`. Não usar como fronteira de segurança em implantação compartilhada.
+- Em `NODE_ENV=production`, o backend exige `authenticateRequest` e `resolveOwner` ao criar a aplicação via `createApp(options)`; sem os dois, as rotas de documentos respondem `503 AUTH_NOT_CONFIGURED`. `resolveOwner` deve retornar o identificador estável da identidade autenticada. O fallback por `X-User-Id` permanece somente para desenvolvimento e testes.
 - Arquivos podem permanecer órfãos se o processo encerrar entre a gravação no disco e a criação dos metadados. O inverso também é possível se os arquivos locais forem removidos manualmente. Sem persistência de metadados, reiniciar o backend torna os registros inacessíveis pela API.
 - O tipo MIME vem do cliente e não é validado. Download é entregue como anexo; conteúdo perigoso, antivírus e políticas de formatos permitidos não fazem parte deste escopo.
+- O upload aceita apenas o arquivo multipart `file`, com tamanho limitado por `MAX_UPLOAD_BYTES`; uploads concorrentes e espaço em disco ainda dependem de quotas e limites no proxy/ambiente de execução.
 - O armazenamento local pressupõe volume persistente e permissões de escrita no diretório configurado.
 
 ## 8. Plano de execução

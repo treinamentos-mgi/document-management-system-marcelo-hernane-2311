@@ -16,16 +16,32 @@ function createLocalFileRepository(options = {}) {
     filename: (req, file, callback) => callback(null, randomUUID()),
   });
 
+  function getStoredPath(storedName) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(storedName)) {
+      throw new Error('Nome de arquivo armazenado inválido.');
+    }
+    return path.join(storageDirectory, storedName);
+  }
+
   return {
     createUploadMiddleware() {
-      return multer({ storage, limits: { fileSize: maximumUploadBytes } });
+      return multer({
+        storage,
+        limits: {
+          fileSize: maximumUploadBytes,
+          files: 1,
+          fields: 0,
+          parts: 2,
+        },
+      });
     },
 
     createReadStream(storedName) {
-      if (path.basename(storedName) !== storedName) {
-        throw new Error('Nome de arquivo armazenado inválido.');
-      }
-      return fs.createReadStream(path.join(storageDirectory, storedName));
+      return fs.createReadStream(getStoredPath(storedName));
+    },
+
+    removeFile(storedName) {
+      return fs.promises.unlink(getStoredPath(storedName));
     },
   };
 }

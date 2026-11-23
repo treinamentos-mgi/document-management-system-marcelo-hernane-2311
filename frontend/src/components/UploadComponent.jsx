@@ -8,6 +8,7 @@ export default function UploadComponent({ userId, onUploaded }) {
 
   async function submitUpload(event) {
     event.preventDefault();
+    const form = event.currentTarget;
     if (!file) {
       setMessage('Escolha um arquivo para enviar.');
       return;
@@ -18,7 +19,7 @@ export default function UploadComponent({ userId, onUploaded }) {
     try {
       await uploadDocument(userId, file);
       setFile(null);
-      event.currentTarget.reset();
+      form.reset();
       setMessage('Documento enviado.');
       onUploaded();
     } catch (error) {
