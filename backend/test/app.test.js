@@ -11,7 +11,8 @@ const servers = [];
 const temporaryDirectories = [];
 
 async function startTestServer(options = {}) {
-  const storageDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'dms-test-'));
+  const storageDirectory = options.storageDirectory
+    || await fs.mkdtemp(path.join(os.tmpdir(), 'dms-test-'));
   temporaryDirectories.push(storageDirectory);
   const testApp = app.createApp({ storageDirectory, ...options });
   const server = testApp.listen(0, '127.0.0.1');
@@ -73,6 +74,70 @@ test('faz upload, lista e baixa arquivos isolados por usuário', async () => {
   assert.equal(downloadResponse.status, 200);
   assert.equal(await downloadResponse.text(), 'conteúdo do documento');
   assert.match(downloadResponse.headers.get('content-disposition'), /relatorio\.txt/);
+});
+
+test('lista documentos do usuário do mais recente para o mais antigo', async () => {
+  const baseUrl = await startTestServer();
+  const uploadedIds = [];
+
+  for (const name of ['primeiro.txt', 'segundo.txt']) {
+    const form = new FormData();
+    form.append('file', new Blob(['abc']), name);
+    const response = await fetch(`${baseUrl}/upload`, {
+      method: 'POST',
+      headers: { 'X-User-Id': 'ana' },
+      body: form,
+    });
+    uploadedIds.push((await response.json()).document.id);
+    // Garante timestamps distintos para validar a ordenação.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  const response = await fetch(`${baseUrl}/documents`, { headers: { 'X-User-Id': 'ana' } });
+  assert.equal(response.status, 200);
+  const { documents } = await response.json();
+  assert.deepEqual(documents.map(({ originalName }) => originalName), ['segundo.txt', 'primeiro.txt']);
+  assert.deepEqual(documents.map(({ id }) => id), uploadedIds.reverse());
+});
+
+test('retorna lista vazia para usuário sem documentos', async () => {
+  const baseUrl = await startTestServer();
+  const response = await fetch(`${baseUrl}/documents`, { headers: { 'X-User-Id': 'ana' } });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { documents: [] });
+});
+
+test('retorna 404 ao baixar um documento inexistente', async () => {
+  const baseUrl = await startTestServer();
+  const response = await fetch(`${baseUrl}/documents/id-inexistente/download`, {
+    headers: { 'X-User-Id': 'ana' },
+  });
+
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error.code, 'DOCUMENT_NOT_FOUND');
+});
+
+test('retorna 404 ao baixar quando o arquivo foi removido do armazenamento', async () => {
+  const storageDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'dms-test-'));
+  const baseUrl = await startTestServer({ storageDirectory });
+  const form = new FormData();
+  form.append('file', new Blob(['abc']), 'sumido.txt');
+  const { document } = await (await fetch(`${baseUrl}/upload`, {
+    method: 'POST',
+    headers: { 'X-User-Id': 'ana' },
+    body: form,
+  })).json();
+
+  for (const storedName of await fs.readdir(storageDirectory)) {
+    await fs.unlink(path.join(storageDirectory, storedName));
+  }
+
+  const response = await fetch(`${baseUrl}/documents/${document.id}/download`, {
+    headers: { 'X-User-Id': 'ana' },
+  });
+  assert.equal(response.status, 404);
+  assert.equal((await response.json()).error.code, 'FILE_NOT_FOUND');
 });
 
 test('valida usuário, arquivo e limite de upload', async () => {
